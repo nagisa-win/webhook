@@ -71,7 +71,7 @@ start_server() {
     echo "✅ Webhook server started successfully!"
     echo "📊 Check status: $SCRIPT_NAME status"
     echo "📝 View logs: pm2 logs $APP_NAME"
-    echo "🔧 Server running on http://localhost:3000"
+    echo "🔧 Server running on http://localhost:8080"
 
     # Show PM2 status
     pm2 status "$APP_NAME"

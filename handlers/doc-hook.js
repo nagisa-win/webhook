@@ -1,4 +1,4 @@
-import fs from 'fs/promises';
+import fs from 'fs';
 import path from 'path';
 
 const FILE_PATH = path.join(process.cwd(), 'storage');
@@ -20,6 +20,23 @@ export function handler(req, res) {
     console.log(`[doc-hook.js] Received ${req.method} request to ${req.path}`);
 
     const { docName, docId, docType, ts, user, doc, comments } = req.body;
+
+    if (!docName || !docId || !docType || !ts) {
+        return res.json({
+            code: 1,
+            status: 'error',
+            message: 'Missing required fields',
+            timestamp: new Date().toLocaleString(),
+            requestInfo: {
+                method: req.method,
+                path: req.path,
+                userAgent: req.get('User-Agent'),
+                contentType: req.get('Content-Type'),
+                bodySize: JSON.stringify(req.body).length,
+                body: req.body,
+            },
+        });
+    }
 
     const fileName = `${docName}_${docId}.${docType}`;
     const filePath = path.join(FILE_PATH, fileName);
@@ -43,37 +60,38 @@ ${comments
     .map(
         item => `${item.author}(${item.authorEmail})：
 ${item.content}
-${item.createAt}`
+${item.createdAt}`
     )
     .join('\n\n')}
 `;
-        fs.writeFile(filePath, fileContent)
-            .then(() => {
-                console.log(`File ${fileName} written successfully`);
-            })
-            .catch(err => {
-                console.error(`Error writing file ${fileName}: ${err}`);
-            });
+        try {
+            fs.writeFileSync(filePath, fileContent);
+            console.log(`File ${fileName} written successfully`);
+        } catch (err) {
+            console.error(`Error writing file ${fileName}: ${err}`);
+        }
     }
     // 保存用户信息
     if (user) {
         const readLogName = fileName + '.json';
         const { name, nickname } = user;
-        fs.readFile(path.join(FILE_PATH, readLogName))
-            .then(data => {
-                if (!data || data.length === 0) {
-                    data = [];
-                }
-                const newUser = new UserReadInfo(name, nickname, ts);
-                data.push(newUser);
-                return fs.writeFile(path.join(FILE_PATH, readLogName), JSON.stringify(data));
-            })
-            .then(() => {
-                console.log(`User read log ${readLogName} written successfully`);
-            })
-            .catch(err => {
-                console.error(`Error writing user read log ${readLogName}: ${err}`);
-            });
+
+        try {
+            const isExist = fs.existsSync(path.join(FILE_PATH, readLogName));
+            const data = isExist ? fs.readFileSync(path.join(FILE_PATH, readLogName)) : '[]';
+            let dataObj;
+            if (!data) {
+                dataObj = [];
+            } else {
+                dataObj = JSON.parse(data);
+            }
+            const newUser = new UserReadInfo(name, nickname, ts);
+            dataObj.push(newUser);
+            fs.writeFileSync(path.join(FILE_PATH, readLogName), JSON.stringify(dataObj));
+            console.log(`User read log ${readLogName} written successfully`);
+        } catch (err) {
+            console.error(`Error writing user read log ${readLogName}: ${err}`);
+        }
     }
 
     // Return simple success response
