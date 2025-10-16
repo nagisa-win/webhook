@@ -24,12 +24,8 @@ webhook/
 ├── README.md            # 文档
 ├── handlers/            # 处理器目录
 │   ├── listen.js        # 基础监听处理器
-│   ├── webhook-test.js  # 测试webhook处理器
 │   ├── health.js        # 健康检查处理器
-│   ├── github-webhook.js # GitHub webhook处理器
-│   └── generic-webhook.js # 通用webhook处理器
 └── logs/                # 日志目录
-    ├── combined.log
     ├── out.log
     └── error.log
 ```
@@ -49,7 +45,7 @@ npm install
 ```json
 {
     "server": {
-        "port": 3000,
+        "port": 8080,
         "host": "0.0.0.0"
     },
     "routes": {
@@ -84,7 +80,7 @@ export function handler(req, res) {
 #### 使用启动脚本（推荐）
 
 ```bash
-./start.sh
+./start.sh start
 ```
 
 #### 手动启动
@@ -104,7 +100,7 @@ npm run pm2:start
 ```json
 {
     "server": {
-        "port": 3000, // 服务端口
+        "port": 8080, // 服务端口
         "host": "0.0.0.0" // 监听地址
     },
     "routes": {
@@ -145,20 +141,23 @@ export function handler(req, res) {
 | ------------------ | ---------------------- | ----------------------- |
 | `/`                | GET, POST              | 基础监听端点            |
 | `/health`          | GET                    | 健康检查                |
-| `/webhook/test`    | POST                   | 测试webhook             |
-| `/webhooks/github` | POST                   | GitHub webhook          |
-| `/webhooks/:id`    | GET, POST, PUT, DELETE | 通用webhook（带ID参数） |
 
 ## PM2管理命令
 
 ```bash
 # 启动服务
+./start.sh start
+
 npm run pm2:start
 
 # 停止服务
+./start.sh stop
+
 npm run pm2:stop
 
 # 重启服务
+./start.sh restart
+
 npm run pm2:restart
 
 # 查看状态
@@ -174,10 +173,10 @@ npm run pm2:logs
 
 ```bash
 # GET请求
-curl http://localhost:3000/
+curl http://localhost:8080/
 
 # POST请求
-curl -X POST http://localhost:3000/ \
+curl -X POST http://localhost:8080/ \
   -H "Content-Type: application/json" \
   -d '{"test": "data"}'
 ```
@@ -185,33 +184,7 @@ curl -X POST http://localhost:3000/ \
 ### 2. 健康检查
 
 ```bash
-curl http://localhost:3000/health
-```
-
-### 3. 测试webhook
-
-```bash
-curl -X POST http://localhost:3000/webhook/test \
-  -H "Content-Type: application/json" \
-  -d '{"webhook": "test", "data": "example"}'
-```
-
-### 4. GitHub webhook模拟
-
-```bash
-curl -X POST http://localhost:3000/webhooks/github \
-  -H "Content-Type: application/json" \
-  -H "X-GitHub-Event: push" \
-  -H "X-GitHub-Delivery: 12345-67890" \
-  -d '{"ref": "refs/heads/main", "commits": [{"message": "test commit"}]}'
-```
-
-### 5. 通用webhook（带ID）
-
-```bash
-curl -X POST http://localhost:3000/webhooks/my-app \
-  -H "Content-Type: application/json" \
-  -d '{"action": "deploy", "version": "1.0.0"}'
+curl http://localhost:8080/health
 ```
 
 ## 开发指南
@@ -266,7 +239,7 @@ export function handler(req, res) {
 
 ```bash
 export NODE_ENV=production
-export PORT=3000
+export PORT=8080
 ```
 
 2. 启动服务：
@@ -292,7 +265,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 COPY . .
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["npm", "start"]
 ```
@@ -324,7 +297,7 @@ CMD ["npm", "start"]
 npm run pm2:logs
 
 # 应用日志
-tail -f logs/combined.log
+tail -f logs/out.log
 
 # 错误日志
 tail -f logs/error.log
