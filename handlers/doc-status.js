@@ -54,6 +54,19 @@ async function readLogForDoc(docId) {
     }
 }
 
+function getLastNDays(n, endTs = Date.now()) {
+    const out = [];
+    const end = new Date(endTs);
+    // normalize to local midnight
+    end.setHours(0, 0, 0, 0);
+    for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(end);
+        d.setDate(end.getDate() - i);
+        out.push(ymd(d));
+    }
+    return out;
+}
+
 function aggregateDailyPvUv(reads) {
     // reads: [{ name, nickname, lastTs }]
     const byDay = new Map(); // day -> { pv, users:Set }
@@ -73,22 +86,43 @@ function aggregateDailyPvUv(reads) {
         globalUsers.add(uid);
     }
 
-    // Sort days ascending
-    const days = Array.from(byDay.keys()).sort();
+    // Build continuous last 10 days timeline (today-based)
+    const last10Days = getLastNDays(10);
     const pvSeries = [];
     const uvSeries = [];
-    for (const d of days) {
-        const bucket = byDay.get(d);
+    for (const d of last10Days) {
+        const bucket = byDay.get(d) || { pv: 0, users: new Set() };
         pvSeries.push(bucket.pv);
         uvSeries.push(bucket.users.size);
     }
 
+    // Yesterday DAU = UV of yesterday (unique users of yesterday)
+    const todayStr = ymd(Date.now());
+    const yesterday = (() => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-1); return ymd(d); })();
+    let yesterdayDau = 0;
+    if (byDay.has(yesterday)) {
+        yesterdayDau = (byDay.get(yesterday).users || new Set()).size;
+    }
+
+    // WAU = unique users over the last 7 calendar days (today-inclusive)
+    const last7Days = getLastNDays(7);
+    const wauUsers = new Set();
+    for (const d of last7Days) {
+        const b = byDay.get(d);
+        if (b && b.users) {
+            for (const u of b.users) wauUsers.add(u);
+        }
+    }
+    const wau = wauUsers.size;
+
     return {
-        days,
+        days: last10Days,
         pvSeries,
         uvSeries,
         totalPv,
         totalUv: globalUsers.size,
+        yesterdayDau,
+        wau,
     };
 }
 
@@ -104,7 +138,7 @@ async function getStats(docId, forceRefresh = false) {
 }
 
 function renderHtml(docId, stats) {
-    const title = `文档 ${docId} - PV/UV 统计`;
+    const title = `文档 ${docId} - 访问统计`;
     // Inline data as script injection-safe JSON
     const dataJson = JSON.stringify(stats);
     return `<!doctype html>
@@ -122,11 +156,11 @@ function renderHtml(docId, stats) {
     h1{margin:0;font-size:20px; font-weight:600}
     .sub{color:var(--muted); font-size:13px; margin-top:6px}
     .container{max-width:1080px; margin:0 auto; padding:8px 16px 32px}
-    .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin:16px 0 20px}
-    .card{background:radial-gradient(1200px 1200px at -10% -10%,rgba(110,168,254,0.08),transparent),radial-gradient(1200px 1200px at 110% -10%,rgba(126,231,135,0.06),transparent),var(--card); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:14px 16px}
+    .cards{display:flex; flex-wrap:nowrap; gap:14px; margin:16px 0 20px; overflow:auto}
+    .card{background:radial-gradient(1200px 1200px at -10% -10%,rgba(110,168,254,0.08),transparent),radial-gradient(1200px 1200px at 110% -10%,rgba(126,231,135,0.06),transparent),var(--card); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:14px 16px; flex-grow:1;}
     .card-title{color:var(--muted); font-size:12px; letter-spacing:.4px}
     .card-value{font-size:26px; font-weight:700; margin-top:6px}
-    .chart-card{padding:0; overflow:hidden}
+    .chart-card{padding:16px; overflow:hidden}
     #chart{width:100%; height:480px}
     footer{color:var(--muted); font-size:12px; text-align:center; padding:16px}
     .row{display:flex; gap:10px; align-items:center}
@@ -143,7 +177,8 @@ function renderHtml(docId, stats) {
     <div class="row" style="justify-content:space-between">
       <div>
         <h1>${title}</h1>
-        <div class="sub">每日统计，自动每日刷新（可手动刷新）</div>
+        <div class="sub">最近10天统计，自动每日刷新（可手动刷新）</div>
+        <div class="sub">页面每3min发送一次tick，记为一次PV</div>
       </div>
       <div class="row">
         <div class="legend"><span class="dot d-pv"></span>PV <span class="dot d-uv"></span>UV</div>
@@ -157,6 +192,9 @@ function renderHtml(docId, stats) {
       <div class="card"><div class="card-title">累计 UV</div><div class="card-value" id="totalUv">-</div></div>
       <div class="card"><div class="card-title">最近一天 PV</div><div class="card-value" id="lastPv">-</div></div>
       <div class="card"><div class="card-title">最近一天 UV</div><div class="card-value" id="lastUv">-</div></div>
+      <div class="card"><div class="card-title">DAU（昨日）</div><div class="card-value" id="dau">-</div></div>
+      <div class="card"><div class="card-title">WAU（最近7天）</div><div class="card-value" id="wau">-</div></div>
+      <div class="card"><div class="card-title">ATP（最近一天）</div><div class="card-value" id="atp">-</div></div>
     </section>
     <section class="card chart-card">
       <div id="chart"></div>
@@ -177,6 +215,12 @@ function renderHtml(docId, stats) {
       const lastUv = uv.length ? uv[uv.length - 1] : 0;
       document.getElementById('lastPv').textContent = lastPv;
       document.getElementById('lastUv').textContent = lastUv;
+      // DAU(昨日)/WAU
+      document.getElementById('dau').textContent = (s.yesterdayDau ?? s.dau ?? 0);
+      document.getElementById('wau').textContent = s.wau ?? 0;
+      // ATP
+      const atpMin = !lastUv ? 0 : (lastPv / lastUv / 3).toFixed(2);
+      document.getElementById('atp').textContent = atpMin + 'min';
     }
 
     function initChart(s){
@@ -186,7 +230,7 @@ function renderHtml(docId, stats) {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
         legend: { data: ['PV','UV'], textStyle:{ color:'#c9d1d9' } },
-        grid: { left: 40, right: 24, top: 40, bottom: 40 },
+        grid: { left: 40, right: 40, top: 40, bottom: 40 },
         xAxis: { type: 'category', boundaryGap: false, data: s.days, axisLabel:{ color:'#9fb0c7' }, axisLine:{ lineStyle:{ color:'#334155' } } },
         yAxis: { type: 'value', axisLabel:{ color:'#9fb0c7' }, splitLine:{ lineStyle:{ color:'rgba(148,163,184,0.15)' } } },
         series: [
