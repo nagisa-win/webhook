@@ -20,8 +20,25 @@ class WebhookServer {
     }
 
     setupMiddleware() {
-        // Security middleware
-        this.app.use(helmet());
+        // Security middleware with CSP allowing our dashboard assets
+        this.app.use(
+            helmet({
+                contentSecurityPolicy: {
+                    useDefaults: true,
+                    directives: {
+                        defaultSrc: ["'self'"],
+                        scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+                        styleSrc: ["'self'", "'unsafe-inline'"],
+                        imgSrc: ["'self'", 'data:'],
+                        connectSrc: ["'self'"],
+                        fontSrc: ["'self'", 'data:'],
+                        objectSrc: ["'none'"],
+                        frameAncestors: ["'self'"],
+                        baseUri: ["'self'"],
+                    },
+                },
+            })
+        );
 
         // CORS middleware
         this.app.use(cors());

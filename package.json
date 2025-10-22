@@ -8,7 +8,7 @@
         "start": "node app.js",
         "dev": "nodemon app.js",
         "lint": "prettier --write \"**/*.{js,jsx,md,json}\"",
-        "pack": "zip webhook.zip -r ./* -x 'node_modules/*'",
+        "pack": "zip webhook.zip -r ./* -x 'node_modules/*' -x 'logs/*' -x 'storage/*'",
         "pm2:start": "pm2 start pm2.config.cjs",
         "pm2:stop": "pm2 stop pm2.config.cjs",
         "pm2:restart": "pm2 restart pm2.config.cjs",

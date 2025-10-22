@@ -19,7 +19,7 @@ export function handler(req, res) {
     // Log the request for debugging
     console.log(`[doc-hook.js] Received ${req.method} request to ${req.path}`);
 
-    const { docName, docId, docType, ts, user, doc, comments } = req.body;
+    const { docName, docId, docType, ts, user, doc, comments = [] } = req.body;
 
     if (!docName || !docId || !docType || !ts) {
         return res.json({

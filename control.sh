@@ -135,6 +135,7 @@ case "${1:-start}" in
         show_usage
         ;;
     *)
-        start_server
+        show_usage
+        exit
         ;;
 esac

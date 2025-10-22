@@ -18,6 +18,11 @@
             "path": "/doc",
             "method": ["GET", "POST"],
             "handler": "doc-hook.js"
+        },
+        "doc status": {
+            "path": "/doc-status/:docId",
+            "method": ["GET"],
+            "handler": "doc-status.js"
         }
     }
 }
